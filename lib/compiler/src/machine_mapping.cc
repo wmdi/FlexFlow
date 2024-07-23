@@ -407,4 +407,114 @@ T optimal_cost(ParallelComputationGraph const &g,
   return searcher.optimal_cost(subpcg, resources, sp_decomposition);
 }
 
+bool is_valid_machine_view(MachineSpecification const& machinespec, MachineView const& view) {
+  if (get_device_type(view) == DeviceType::GPU) {
+    int gpu_start_value = unwrap_gpu(view.start).value(); 
+    int last_device_id = gpu_start_value;
+    for (StridedRectangleSide const &side : view.rect.sides) {
+      last_device_id += (side.get_size().value() - 1) * side.get_stride();
+    }
+    // Check that last device id in range
+    if (last_device_id >= gpu_start_value + (machinespec.num_nodes - 1) * machinespec.num_gpus_per_node) {
+      return false;
+    }
+    // in case all_gpus_per_node > available_gpus_per_node
+    // if (all_gpus_per_node > available_gpus_per_node) {
+    //   int used_gpus_per_node = 1;
+    //   for (int i = 0; i < view.ndims; i++) {
+    //     if (view.stride[i] < all_gpus_per_node) {
+    //       used_gpus_per_node += (view.dim[i] - 1) * view.stride[i];
+    //     }
+    //   }
+    //   if (used_gpus_per_node > available_gpus_per_node) {
+    //     return false;
+    //   }
+    // }
+    return true;
+  } else if (get_device_type(view) == DeviceType::CPU) {
+    int cpu_start_value = unwrap_cpu(view.start).value(); 
+    int last_device_id = cpu_start_value;
+    for (StridedRectangleSide const &side : view.rect.sides) {
+      last_device_id += (side.get_size().value() - 1) * side.get_stride();
+    }
+    // Check that last device id in range
+    if (last_device_id >= cpu_start_value + (machinespec.num_nodes - 1) * machinespec.num_cpus_per_node) {
+      return false;
+    }
+    // in case all_cpus_per_node > available_cpus_per_node
+    // if (all_cpus_per_node > available_cpus_per_node) {
+    //   int used_cpus_per_node = 1;
+    //   for (int i = 0; i < view.ndims; i++) {
+    //     if (view.stride[i] < all_cpus_per_node) {
+    //       used_cpus_per_node += (view.dim[i] - 1) * view.stride[i];
+    //     }
+    //   }
+    //   if (used_cpus_per_node > available_cpus_per_node) {
+    //     return false;
+    //   }
+    // }
+    return true;
+  } else {
+    assert(false && "Unsupported Device Type");
+    return false;
+  }
+}
+
+
+bool is_valid_machine_view(Operator const &op, MachineView const& view) {
+//   int is_dim = 0;
+//   for (int i = 0; i < num_dims; i++) {
+//     if (dims[i].parallel_idx != -1) {
+//       is_dim++;
+//       if (dims[i].parallel_idx > view.ndims) {
+//         return false;
+//       }
+//       if (view.dim[dims[i].parallel_idx] != dims[i].degree) {
+//         return false;
+//       }
+//     }
+//   }
+//   if (is_dim == 0) {
+//     is_dim = 1;
+//   }
+//   if (is_dim != view.ndims) {
+//     return false;
+//   }
+//   if (get_total_num_parts() != view.num_parts()) {
+//     return false;
+//   }
+// return true;
+}
+
+std::unordered_set<MachineView> get_all_machine_views(MachineSpecification const &machinespec) {
+  std::unordered_set<MachineView> machine_views;
+  
+  // Single-dimensional views
+  for (int i = 1; i <= machinespec.num_nodes * machinespec.num_gpus_per_node; i++) {
+    if (machinespec.num_nodes * machinespec.num_gpus_per_node % i == 0) {
+      MachineView view = make_1d_machine_view(gpu_id_t(0), gpu_id_t(i), 1);
+      machine_views.insert(view);
+    }
+  }
+
+  // Two-dimensional views
+  for (int i = 1; i <= machinespec.num_nodes; i++) {
+     for (int j = 1; j <= machinespec.num_gpus_per_node; j++) {
+      StridedRectangleSide s1 = {side_size_t(i), 1};
+      StridedRectangleSide s2 = {side_size_t(j), 1};
+      StridedRectangle rect = {{s2, s2}};
+      MachineView view = {gpu_id_t(0), rect};
+      machine_views.insert(view);
+     }
+   }
+  return machine_views;
+}
+
+std::unordered_set<MachineView> get_allowed_machine_views(Operator const &op, MachineSpecification const & machinespec) {
+
+  std::unordered_set<MachineView> operator_views = filter(get_all_machine_views(machinespec), [&](MachineView const& view) {return is_valid_machine_view(op, view);}); 
+  operator_views = filter(operator_views, [&](MachineView const &view) {return is_valid_machine_view(machinespec, view);});
+  return operator_views;
+}
+
 } // namespace FlexFlow

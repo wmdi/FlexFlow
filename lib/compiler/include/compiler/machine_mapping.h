@@ -19,7 +19,6 @@ enum class OpMemoryDecision {
 
 template <typename T>
 struct NodeMapping {
-  NodeMapping() = default;
   static NodeMapping combine(NodeMapping const &, NodeMapping const &);
   static bool nodes_are_disjoint(NodeMapping const &m1, NodeMapping const &m2);
 
@@ -93,7 +92,6 @@ struct MemoryConfig {
 FF_VISITABLE_STRUCT(MemoryConfig, residual_memory, temporary_memory);
 
 struct MemoryResult {
-
   static MemoryResult sequential_combine(MemoryResult const &,
                                          MemoryResult const &);
   static MemoryResult parallel_combine(MemoryResult const &,
